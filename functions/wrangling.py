@@ -8,12 +8,14 @@ import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 
-def get_rfm(data, m_mean=False):
+def get_rfm(data, score=False, m_mean=False):
     """Function to get the three RFM features,
     commonly used in database marketing.
     Parameters:
     data: DataFrame
         the pandas object holding data
+    score: bool, default False
+        to get a score between 1 and 10 instead of the true values   
     m_mean: bool, default False
         to get the mean and not the total for the monetary value
     -----------
@@ -28,11 +30,14 @@ def get_rfm(data, m_mean=False):
     # get the Recency
     recency = (data.groupby("customer_unique_id")
                    .order_purchase_timestamp
-                   .max())
-    recency = 10 - (date_ref-recency)/np.timedelta64(1, 'M')
-    recency = (recency.round()
-                      .fillna(0)
-                      .where(recency>1, other=1))
+                   .max()
+                   .apply(lambda x: date_ref - x)
+                   .apply(lambda x: x / np.timedelta64(1, 'M')))
+    recency.fillna(recency.max(), inplace=True)
+    if score:
+        recency = (recency.apply(lambda x: 10 - x)
+                          .round()
+                          .where(recency>1, other=1))
     # get the Monetary_value
     monetary = (data.groupby("customer_unique_id")
                     .price
@@ -42,16 +47,18 @@ def get_rfm(data, m_mean=False):
         monetary /= (data.groupby("customer_unique_id")
                          .order_id
                          .nunique())
-    monetary = (pd.qcut(monetary, q=10,
-                        labels=np.linspace(1, 10, 10))
-                  .astype(int))
+    if score:
+        monetary = (pd.qcut(monetary, q=10,
+                            labels=np.linspace(1, 10, 10))
+                      .astype(int))
     # get the Frequency
     frequency = (data.groupby("customer_unique_id")
                      .order_id
-                     .nunique())
-    frequency = (frequency.fillna(0)
-                          .where(frequency>0, other=1)
-                          .where(frequency<10, other=10))
+                     .nunique()
+                     .fillna(0))
+    if score:
+        frequency = (frequency.where(frequency>0, other=1)
+                              .where(frequency<10, other=10))
     # Create the DataFrame
     df = pd.DataFrame({"Recency": recency,
                        "Frequency": frequency,
@@ -79,19 +86,20 @@ def product_type(data):
     data: DataFrame
         the pandas object holding data
     -----------
-    Return: 1d Array
-        the numpy object holding data
+    Return: tuple
+        * The list of the features
+        * the numpy object holding data
     """
     # create a dataframe will all required features
     features = ["price",
                 "product_description_lenght",
                 "freight_value"]
-
+    
     df = data.groupby("customer_unique_id")[features].mean()
     # Impute missing data by the mean
     imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean')
     X = imp_mean.fit_transform(df.values)
-    return X
+    return features, X
 
 def review_score(data):
     """Function to get a score of the reviews
@@ -211,7 +219,7 @@ def wrangling_pipeline(data, ref_date=None, m_mean=False):
     Parameters:
     data: DataFrame
         the pandas object holding data
-    ref_date: datetime object
+    ref_date: datetime objects
         the reference date to be used to filter data
     m_mean: bool, default False
         to get the mean and not the total for the monetary value
@@ -221,14 +229,14 @@ def wrangling_pipeline(data, ref_date=None, m_mean=False):
     """
     if not ref_date:
         ref_date = data.order_purchase_timestamp.max()
-    df = data_filter(data, ref_date=ref_date)
-    df = get_rfm(df, m_mean=m_mean)
+    data = data_filter(data, ref_date=ref_date)
+    df = get_rfm(data, m_mean=m_mean)
     df["order_n_products"] = products_per_order(data)
-    list_features, product_array = product_type(df)
+    list_features, product_array = product_type(data)
     for i, c in enumerate(list_features):
-        data[c] = product_array[:, i]
+        df[c] = product_array[:, i]
     df["review"] = review_score(data)
-    list_payment, payment_array = payment_type(df)
+    list_payment, payment_array = payment_type(data)
     for i, c in enumerate(list_payment):
         df[c] = payment_array[:, i]
     return scale_data(df)
