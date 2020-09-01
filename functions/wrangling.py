@@ -214,15 +214,17 @@ def data_filter(data, ref_date):
     """
     return data[data.order_purchase_timestamp<=ref_date]
 
-def wrangling_pipeline(data, ref_date=None, m_mean=False):
+def wrangling_pipeline(data, ref_date=None, m_mean=False, score=False):
     """pipeline to carry out all functions of data wrangling.
     Parameters:
     data: DataFrame
         the pandas object holding data
-    ref_date: datetime objects
+    ref_date: datetime object
         the reference date to be used to filter data
     m_mean: bool, default False
         to get the mean and not the total for the monetary value
+    score: bool, default False
+        to get a score between 1 and 10 instead of the true values
     -----------
     Return:
         DataFrame
@@ -230,7 +232,7 @@ def wrangling_pipeline(data, ref_date=None, m_mean=False):
     if not ref_date:
         ref_date = data.order_purchase_timestamp.max()
     data = data_filter(data, ref_date=ref_date)
-    df = get_rfm(data, m_mean=m_mean)
+    df = get_rfm(data, m_mean=m_mean, score=score)
     df["order_n_products"] = products_per_order(data)
     list_features, product_array = product_type(data)
     for i, c in enumerate(list_features):

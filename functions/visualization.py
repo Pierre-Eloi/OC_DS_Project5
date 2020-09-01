@@ -22,13 +22,12 @@ def corr_transformed(data, pvalue=False):
     Return : a (x, y, value) tuple
     """
     if pvalue:
-        corr = data.corr(method=lambda x, y: pearsonr(x, y)[1]) - np.eye(len(data.columns)-1)
-        corr_unpivot = pd.melt(corr.reset_index(), id_vars='index') # Unpivot the dataframe
-        corr_unpivot.columns = ['x', 'y', 'value']
+        corr = data.corr(method=lambda x, y: pearsonr(x, y)[1]) - np.eye(len(data.columns))
     else:
         corr = data.corr()
-        corr_unpivot = pd.melt(corr.reset_index(), id_vars='index') # Unpivot the dataframe
-        corr_unpivot.columns = ['x', 'y', 'value']
+    corr_unpivot = (pd.melt(corr.reset_index(), id_vars='index',
+                            var_name='y', value_name='value') # Unpivot the dataframe
+                      .rename(columns={'index': 'x'}))
     return corr_unpivot['x'], corr_unpivot['y'], corr_unpivot['value']
 
 
@@ -123,7 +122,7 @@ def corr_plot(data, size_scale=500, save=True):
     corr_pearson = corr_transformed(data)
     corr_pvalue = corr_transformed(data, pvalue=True)
     # Create the figure
-    fig = plt.figure(figsize=(12, 4.8))
+    fig = plt.figure(figsize=(15, 6))
     # Create the pearson heatmap
     ax_1 = fig.add_subplot(121)
     heatmap_1 = corr_heatmap(corr_pearson[0], corr_pearson[1], corr_pearson[2],
@@ -141,5 +140,5 @@ def corr_plot(data, size_scale=500, save=True):
         folder_path=os.path.join("charts")
         if not os.path.isdir(folder_path):
             os.makedirs(folder_path)
-        plt.savefig("charts/coor_matrix.png")
+        plt.savefig("charts/corr_matrix.png")
     plt.show()
