@@ -6,7 +6,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 
 def get_rfm(data, score=False, m_mean=False):
     """Function to get the three RFM features,
@@ -15,7 +15,7 @@ def get_rfm(data, score=False, m_mean=False):
     data: DataFrame
         the pandas object holding data
     score: bool, default False
-        to get a score between 1 and 10 instead of the true values   
+        to get a score between 1 and 10 instead of the true values
     m_mean: bool, default False
         to get the mean and not the total for the monetary value
     -----------
@@ -26,44 +26,52 @@ def get_rfm(data, score=False, m_mean=False):
     f_feature = "order_id"
     m_feature = "price"
     # Set a reference date
-    date_ref = data[r_feature].max()
+    date_max = data[r_feature].max()
+    time_delta = np.timedelta64(12, 'M')
+    date_ref = date_max - time_delta
     # get the Recency
     recency = (data.groupby("customer_unique_id")
                    .order_purchase_timestamp
                    .max()
-                   .apply(lambda x: date_ref - x)
+                   .apply(lambda x: date_max - x)
                    .apply(lambda x: x / np.timedelta64(1, 'M')))
     recency.fillna(recency.max(), inplace=True)
     if score:
-        recency = (recency.apply(lambda x: 10 - x)
-                          .round()
-                          .where(recency>1, other=1))
+        recency = (recency.apply(lambda x: 5 - x//3)
+                          .round())
+        recency.where(recency > 1, 1, inplace=True)
     # get the Monetary_value
     monetary = (data.groupby("customer_unique_id")
                     .price
-                    .sum()
-                    .fillna(0))
+                    .sum())
     if m_mean:
         monetary /= (data.groupby("customer_unique_id")
                          .order_id
                          .nunique())
     if score:
-        monetary = (pd.qcut(monetary, q=10,
-                            labels=np.linspace(1, 10, 10))
+        monetary = (pd.qcut(monetary, q=5,
+                            labels=np.linspace(1, 5, 5))
                       .astype(int))
     # get the Frequency
-    frequency = (data.groupby("customer_unique_id")
-                     .order_id
-                     .nunique()
-                     .fillna(0))
+    mask = (data.order_purchase_timestamp >= date_ref)
+    frequency = (data[mask].groupby("customer_unique_id")
+                           .order_id
+                           .nunique()
+                           .rename("Frequency"))
     if score:
-        frequency = (frequency.where(frequency>0, other=1)
-                              .where(frequency<10, other=10))
+        frequency = (frequency.apply(lambda x: x + 1)
+                              .where(frequency<5, other=5))
     # Create the DataFrame
-    df = pd.DataFrame({"Recency": recency,
-                       "Frequency": frequency,
-                       "Monetary_value": monetary},
-                      index=recency.index)
+    df = (pd.DataFrame({"Recency": recency,
+                        "Monetary_value": monetary},
+                        index=recency.index)
+            .merge(frequency, how="outer", left_index=True, right_index=True)
+            .loc[:, ["Recency", "Frequency", "Monetary_value"]])
+    if score:
+        df.fillna(1, inplace=True)
+    else:
+        df.fillna(0, inplace=True)
+
     return df
 
 def products_per_order(data):
@@ -94,7 +102,7 @@ def product_type(data):
     features = ["price",
                 "product_description_lenght",
                 "freight_value"]
-    
+
     df = data.groupby("customer_unique_id")[features].mean()
     # Impute missing data by the mean
     imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean')
@@ -178,7 +186,7 @@ def payment_type(data):
 
 def scale_data(data):
     """Function to scale data by:
-    1) removing the mean and scaling to unit variance.
+    1) using a min-max scaling
     2) Increasing the weigh of RFM features
     -----------
     Parameters:
@@ -191,10 +199,10 @@ def scale_data(data):
     rfm_feat = ["Recency", "Frequency", "Monetary_value"]
     df = data.copy()
     n = data.columns.size
-    weight = (n-3) / 3
+    weight = (n-3) / 3 * 1.5
     X = data.values
-    std_scaler = StandardScaler()
-    X_scaled = std_scaler.fit_transform(X)
+    scaler = MinMaxScaler()
+    X_scaled = scaler.fit_transform(X)
     df.loc[:, :] = X_scaled
     df.loc[:, rfm_feat] *= weight
     return df
