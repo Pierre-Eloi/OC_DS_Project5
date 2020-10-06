@@ -41,23 +41,31 @@ def get_rfm(data, score=False, m_mean=False):
                           .round())
         recency.where(recency > 1, 1, inplace=True)
     # get the Monetary_value
-    monetary = (data.groupby("customer_unique_id")
-                    .price
-                    .sum())
     if m_mean:
+        monetary = (data.groupby("customer_unique_id")
+                        .price
+                        .sum())
         monetary /= (data.groupby("customer_unique_id")
                          .order_id
                          .nunique())
+    else:
+        monetary = (data.groupby("customer_unique_id")
+                    .price
+                    .max())
+    monetary.fillna(0, inplace=True)
     if score:
-        monetary = (pd.qcut(monetary, q=5,
-                            labels=np.linspace(1, 5, 5))
-                      .astype(int))
+        max_m = monetary.max() + .1 # the rightmost edge is not included
+        bins = [0, 50, 100, 500, 1000, max_m]
+        monetary = (pd.cut(monetary, bins, right=False,
+                           labels=np.linspace(1, 5, 5))
+                      .astype(float))
     # get the Frequency
     mask = (data.order_purchase_timestamp >= date_ref)
     frequency = (data[mask].groupby("customer_unique_id")
                            .order_id
                            .nunique()
                            .rename("Frequency"))
+    frequency.fillna(0, inplace=True)
     if score:
         frequency = (frequency.apply(lambda x: x + 1)
                               .where(frequency<5, other=5))
@@ -86,7 +94,13 @@ def products_per_order(data):
     """
     s = data.groupby("customer_unique_id")["product_id"].count()/ \
         data.groupby("customer_unique_id")["order_id"].nunique()
-    return s.fillna(0)
+    s.fillna(0, inplace=True)
+    max_n = s.max() + .1 # the rightmost edge is not included
+    bins = [0, 1, 3, 5, 10, max_n]
+    s = (pd.cut(s, bins, right=False,
+                labels=np.linspace(1, 5, 5))
+           .astype(float))
+    return s
 
 def product_type(data):
     """Function to get the type product for each customer.
@@ -98,16 +112,38 @@ def product_type(data):
         * The list of the features
         * the numpy object holding data
     """
-    # create a dataframe will all required features
+    # create a dataframe with all required features
     features = ["price",
-                "product_description_lenght",
+                "product_description_length",
                 "freight_value"]
-
     df = data.groupby("customer_unique_id")[features].mean()
-    # Impute missing data by the mean
-    imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean')
-    X = imp_mean.fit_transform(df.values)
-    return features, X
+    mean_desc = df["product_description_length"].mean()
+    values = {"price": 0,
+              "product_description_length": mean_desc,
+              "freight_value": 0}
+    df.fillna(values, inplace=True)
+    # Price binning
+    max_price = df["price"].max() + .1 # the rightmost edge is not included
+    bins = [0, 50, 100, 500, 1000, max_price]
+    df["price"] = (pd.cut(df["price"], bins, right=False,
+                          labels=np.linspace(1, 5, 5))
+                     .astype(float))
+    # product_description_length binning
+    max_length = df["product_description_length"].max() + .1
+    bins = [0, 100, 500, 1000, 2000, max_length]
+    df["product_description_length"] = (pd.cut(df["product_description_length"],
+                                               bins, right=False,
+                                               labels=np.linspace(1, 5, 5))
+                                          .astype(float))
+    # freight_value binning
+    max_freight = df["freight_value"].max() + .1
+    bins = [0, 5, 10, 20, 50, max_freight]
+    df["freight_value"] = (pd.cut(df["freight_value"],
+                                  bins, right=False,
+                                  labels=np.linspace(1, 5, 5))
+                             .astype(float))
+
+    return features, df.values
 
 def review_score(data):
     """Function to get a score of the reviews
@@ -130,29 +166,32 @@ def review_score(data):
     review_timedelta = (df.groupby("customer_unique_id")
                           .review_answer_timedelta
                           .mean())
-    review_timedelta = 10 - review_timedelta
+    review_timedelta = 5 - review_timedelta
     review_timedelta = (review_timedelta.round()
                                         .fillna(0)
                                         .where(review_timedelta>1,
                                                other=1))
-    # get the number of review per customer
+    # get the average number of review per order
     review_n = (df.groupby("customer_unique_id")
                   .review_id
                   .count())
-    review_n = (review_n.fillna(0)
-                        .where(review_n>0, other=1)
-                        .where(review_n<10, other=10))
+    review_n /= (df.groupby("customer_unique_id")
+                   .order_id
+                   .nunique())
+    max_review_n = review_n.max()
+    bins = [0, 1, 2, 3, 4, max_review_n]
+    review_n = (pd.cut(review_n, bins,
+                       labels=np.linspace(1, 5, 5))
+                  .astype(float))
     # get the review mark
     review_mark = (df.groupby("customer_unique_id")
                      .review_score
                      .mean())
-    review_mark *=2
     review_mark = (review_mark.fillna(review_mark.mean())
                               .round())
     # get the score
     review = review_timedelta + review_n + review_mark
-    review /= 3
-    return review.round()
+    return review.round(1)
 
 def payment_type(data):
     """Function to get the type of payment used by each customer.
@@ -187,7 +226,7 @@ def payment_type(data):
 def scale_data(data):
     """Function to scale data by:
     1) using a min-max scaling
-    2) Increasing the weigh of RFM features
+    2) Increasing the weigh of RFM features, thus the ladder will represent 50% of the total weight.
     -----------
     Parameters:
     data: DataFrame
@@ -199,7 +238,7 @@ def scale_data(data):
     rfm_feat = ["Recency", "Frequency", "Monetary_value"]
     df = data.copy()
     n = data.columns.size
-    weight = (n-3) / 3 * 1.5
+    weight = (n-3) / 3
     X = data.values
     scaler = MinMaxScaler()
     X_scaled = scaler.fit_transform(X)
