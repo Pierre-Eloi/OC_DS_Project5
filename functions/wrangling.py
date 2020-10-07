@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 
 def get_rfm(data, score=False, m_mean=False):
     """Function to get the three RFM features,
@@ -82,12 +83,14 @@ def get_rfm(data, score=False, m_mean=False):
 
     return df
 
-def products_per_order(data):
+def products_per_order(data, binning=False):
     """Function to get the average number
     of products per order.
     Parameters:
     data: DataFrame
         the pandas object holding data
+    binning: bool, default False
+        to create a category feature with five categories
     -----------
     Return: Series
         the pandas object holding data
@@ -95,18 +98,21 @@ def products_per_order(data):
     s = data.groupby("customer_unique_id")["product_id"].count()/ \
         data.groupby("customer_unique_id")["order_id"].nunique()
     s.fillna(0, inplace=True)
-    max_n = s.max() + .1 # the rightmost edge is not included
-    bins = [0, 1, 3, 5, 10, max_n]
-    s = (pd.cut(s, bins, right=False,
-                labels=np.linspace(1, 5, 5))
-           .astype(float))
+    if binning:
+        max_n = s.max() + .1 # the rightmost edge is not included
+        bins = [0, 1, 3, 5, 10, max_n]
+        s = (pd.cut(s, bins, right=False,
+                    labels=np.linspace(1, 5, 5))
+               .astype(float))
     return s
 
-def product_type(data):
+def product_type(data, binning=False):
     """Function to get the type product for each customer.
     Parameters:
     data: DataFrame
         the pandas object holding data
+    binning: bool, default False
+        to create a category feature with five categories
     -----------
     Return: tuple
         * The list of the features
@@ -122,26 +128,27 @@ def product_type(data):
               "product_description_length": mean_desc,
               "freight_value": 0}
     df.fillna(values, inplace=True)
-    # Price binning
-    max_price = df["price"].max() + .1 # the rightmost edge is not included
-    bins = [0, 50, 100, 500, 1000, max_price]
-    df["price"] = (pd.cut(df["price"], bins, right=False,
-                          labels=np.linspace(1, 5, 5))
-                     .astype(float))
-    # product_description_length binning
-    max_length = df["product_description_length"].max() + .1
-    bins = [0, 100, 500, 1000, 2000, max_length]
-    df["product_description_length"] = (pd.cut(df["product_description_length"],
-                                               bins, right=False,
-                                               labels=np.linspace(1, 5, 5))
-                                          .astype(float))
-    # freight_value binning
-    max_freight = df["freight_value"].max() + .1
-    bins = [0, 5, 10, 20, 50, max_freight]
-    df["freight_value"] = (pd.cut(df["freight_value"],
-                                  bins, right=False,
-                                  labels=np.linspace(1, 5, 5))
-                             .astype(float))
+    if binning:
+        # Price binning
+        max_price = df["price"].max() + .1 # the rightmost edge is not included
+        bins = [0, 50, 100, 500, 1000, max_price]
+        df["price"] = (pd.cut(df["price"], bins, right=False,
+                              labels=np.linspace(1, 5, 5))
+                         .astype(float))
+        # product_description_length binning
+        max_length = df["product_description_length"].max() + .1
+        bins = [0, 100, 500, 1000, 2000, max_length]
+        df["product_description_length"] = (pd.cut(df["product_description_length"],
+                                                   bins, right=False,
+                                                   labels=np.linspace(1, 5, 5))
+                                              .astype(float))
+        # freight_value binning
+        max_freight = df["freight_value"].max() + .1
+        bins = [0, 5, 10, 20, 50, max_freight]
+        df["freight_value"] = (pd.cut(df["freight_value"],
+                                      bins, right=False,
+                                      labels=np.linspace(1, 5, 5))
+                                 .astype(float))
 
     return features, df.values
 
@@ -240,7 +247,7 @@ def scale_data(data):
     n = data.columns.size
     weight = (n-3) / 3
     X = data.values
-    scaler = MinMaxScaler()
+    scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     df.loc[:, :] = X_scaled
     df.loc[:, rfm_feat] *= weight
