@@ -229,29 +229,6 @@ def payment_type(data):
                       .sum())
     return list_payment_type, df.fillna(0).values
 
-def scale_data(data):
-    """Function to scale data by:
-    1) using a min-max scaling
-    2) Increasing the weigh of RFM features, thus the ladder will represent 50% of the total weight.
-    -----------
-    Parameters:
-    data: DataFrame
-        the pandas object holding data
-    -----------
-    Return:
-        DataFrame
-    """
-    rfm_feat = ["Recency", "Frequency", "Monetary_value"]
-    df = data.copy()
-    n = data.columns.size
-    weight = (n-3) / 3
-    X = data.values
-    scaler = MinMaxScaler()
-    X_scaled = scaler.fit_transform(X)
-    df.loc[:, :] = X_scaled
-    df.loc[:, rfm_feat] *= weight
-    return df
-
 def data_filter(data, ref_date):
     """Function to filter data by keeping only
     the orders purchased prior to a reference data
@@ -296,4 +273,4 @@ def wrangling_pipeline(data, ref_date=None, m_mean=False, score=False, binning=F
     list_payment, payment_array = payment_type(data)
     for i, c in enumerate(list_payment):
         df[c] = payment_array[:, i]
-    return scale_data(df)
+    return df
