@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.preprocessing import StandardScaler
 
 def get_rfm(data, score=False, m_mean=False):
     """Function to get the three RFM features,
@@ -247,7 +246,7 @@ def scale_data(data):
     n = data.columns.size
     weight = (n-3) / 3
     X = data.values
-    scaler = StandardScaler()
+    scaler = MinMaxScaler()
     X_scaled = scaler.fit_transform(X)
     df.loc[:, :] = X_scaled
     df.loc[:, rfm_feat] *= weight
@@ -268,7 +267,7 @@ def data_filter(data, ref_date):
     """
     return data[data.order_purchase_timestamp<=ref_date]
 
-def wrangling_pipeline(data, ref_date=None, m_mean=False, score=False):
+def wrangling_pipeline(data, ref_date=None, m_mean=False, score=False, binning=False):
     """pipeline to carry out all functions of data wrangling.
     Parameters:
     data: DataFrame
@@ -279,6 +278,8 @@ def wrangling_pipeline(data, ref_date=None, m_mean=False, score=False):
         to get the mean and not the total for the monetary value
     score: bool, default False
         to get a score between 1 and 10 instead of the true values
+    binning: bool, default False
+        to create a category feature with five categories
     -----------
     Return:
         DataFrame
@@ -287,8 +288,8 @@ def wrangling_pipeline(data, ref_date=None, m_mean=False, score=False):
         ref_date = data.order_purchase_timestamp.max()
     data = data_filter(data, ref_date=ref_date)
     df = get_rfm(data, m_mean=m_mean, score=score)
-    df["order_n_products"] = products_per_order(data)
-    list_features, product_array = product_type(data)
+    df["order_n_products"] = products_per_order(data, binning=binning)
+    list_features, product_array = product_type(data, binning=binning)
     for i, c in enumerate(list_features):
         df[c] = product_array[:, i]
     df["review"] = review_score(data)
