@@ -10,9 +10,9 @@ L'analyse a été découpée en deux notebooks:
 - **Project5_Data_Wrangling** qui regroupe l'analyse exploratoire des données
 - **Project5_Clustering** qui regroupe les différents modèles de clustering testés
 
-*Une version html des notebooks a été ajoutée de manière à pouvoir les visualiser sans avoir à installer les librairies requises*
+*Une version html des notebooks a été ajoutée de manière à pouvoir les visualiser sans avoir à installer les librairies requises*.
 
-Les librairies python nécessaires pour pouvoir lancer le notebook sont regroupées dans le fichier *requirements.txt*  
+Les librairies python nécessaires pour pouvoir lancer le notebook sont regroupées dans le fichier *requirements.txt*.  
 Toutes les fonctions créées afin de préparer les données (incluant un pipeline à la fin) ont été regroupées dans le fichier **functions/wrangling.py**.  
 Les figures ont été regroupées dans le dossier **charts**.
 
